@@ -43,7 +43,7 @@ Para aplicar a estimação de densidades em two_moons, utilizando o NICE e KDE:
 python main/density_estimation/density_estimation.py
 ```
 <p align="center">
-  <img src="plots/density_estimation.png" alt="" width = 300>
+  <img src="plots/density_estimation.png" alt="" width = 500>
 </p>
 
 ## 2 - Aprendizado generativo
@@ -66,13 +66,19 @@ Para treinamento apresentado no TCC, utiliza-se, como exemplo, os comandos:
 ### NICE
 
 ```bash
-python main/generative_learning/train.py --method nice --sample-size 32 --dataset mnist  --coupling 10 --prior gaussian --coupling-type additive --mid-dim 1024 --hidden 8 --lr 0.0005 
+python main/generative_learning/train.py --method nice --sample-size 32 --dataset mnist  --coupling 10 --prior gaussian --epochs 50 --coupling-type additive --mid-dim 1024 --hidden 8 --lr 0.0005 
 ```
+<p align="center">
+  <img src="plots/mnist_batch128_coupling10_typeadditive_mid1024_hidden8_epoch50_gaussian.png" alt="" width = 170>
+</p>
 
 ### GAN
 ```bash
 python main/generative_learning/train.py --method gan --sample-size 32 --dataset fashion-mnist --latent-dim 100 --lr 0.0005 --epochs 50 --batch-size 128
 ```
+<p align="center">
+  <img src="plots/fashion-mnist_gan_batch128_latent100_epoch50.png" alt="" width = 170>
+</p>
 
 Abaixo, segue tabela adaptada com parâmetros que podem ser aplicados: 
 
@@ -95,3 +101,4 @@ Abaixo, segue tabela adaptada com parâmetros que podem ser aplicados:
 | `--hidden`           | Número de camadas ocultas em cada coupling layer                              | NICE           |
 | `--lr-schedule`      | Habilita scheduler de learning rate (ReduceLROnPlateau)                       | NICE           |
 | `--latent-dim`       | Dimensão do espaço latente (vetor z de entrada do generator)                  | GAN            | 
+

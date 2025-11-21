@@ -33,7 +33,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 ```
 ## 0 - Estrutura de pastas
 
-Os códigos desenvolvidos estão nas pastas **[main/density_estimation](https://github.com/marcoaguibor/tcc_marcoguibor_2025-teste/tree/main/main/generative_learning)** e **[main/generative_learning](https://github.com/marcoaguibor/tcc_marcoguibor_2025-teste/tree/main/main/density_estimation)**. Os resultados são salvos na pasta **[plots](https://github.com/marcoaguibor/tcc_marcoguibor_2025-teste/tree/main/plots)**
+Os códigos desenvolvidos estão nas pastas **[main/density_estimation](https://github.com/marcoaguibor/tcc_marcoguibor_2025-teste/tree/main/main/generative_learning)** e **[main/generative_learning](https://github.com/marcoaguibor/tcc_marcoguibor_2025-teste/tree/main/main/density_estimation)**. Os resultados são salvos na pasta **[plots](https://github.com/marcoaguibor/tcc_marcoguibor_2025-teste/tree/main/plots)**.
 
 ## 1 - Estimação de densidades
 

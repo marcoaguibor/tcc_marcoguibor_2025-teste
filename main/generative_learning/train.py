@@ -1,12 +1,4 @@
-# CÓDIGO ADAPTADO DE OFEKIRSH (2035)
-
-#!/usr/bin/env python3
-"""
-NICE Flow and GAN Implementation with PyTorch
----------------------------------------------
-This module implements training and evaluation of NICE (Non-linear Independent Components Estimation)
-flow-based generative models and GANs on image datasets.
-"""
+# CÓDIGO ADAPTADO DE OFEKIRSH (2025)
 
 import argparse
 import logging
@@ -39,41 +31,28 @@ except ImportError:
 # ==================== GAN Models ====================
 
 class Generator(nn.Module):
-    """
-    Generator network for GAN.
-    Architecture: 8 hidden layers with 1024 neurons each (matching NICE architecture).
-    """
+    """Generator network for GAN."""
     
     def __init__(self, latent_dim: int = 100, img_shape: Tuple[int, int, int] = (1, 28, 28)):
         super(Generator, self).__init__()
         self.img_shape = img_shape
         self.img_size = int(torch.prod(torch.tensor(img_shape)))
         
-        # Build 8 hidden layers with 1024 neurons each (matching NICE)
-        layers = []
-        
-        # First layer: latent_dim -> 1024
-        layers.extend([
-            nn.Linear(latent_dim, 1024),
-            nn.BatchNorm1d(1024, 0.8),
-            nn.LeakyReLU(0.2, inplace=True)
-        ])
-        
-        # 7 more hidden layers: 1024 -> 1024
-        for _ in range(7):
-            layers.extend([
-                nn.Linear(1024, 1024),
-                nn.BatchNorm1d(1024, 0.8),
-                nn.LeakyReLU(0.2, inplace=True)
-            ])
-        
-        # Output layer: 1024 -> img_size
-        layers.extend([
+        def block(in_feat, out_feat, normalize=True):
+            layers = [nn.Linear(in_feat, out_feat)]
+            if normalize:
+                layers.append(nn.BatchNorm1d(out_feat, 0.8))
+            layers.append(nn.LeakyReLU(0.2, inplace=True))
+            return layers
+
+        self.model = nn.Sequential(
+            *block(latent_dim, 128, normalize=False),
+            *block(128, 256),
+            *block(256, 512),
+            *block(512, 1024),
             nn.Linear(1024, self.img_size),
             nn.Tanh()
-        ])
-        
-        self.model = nn.Sequential(*layers)
+        )
 
     def forward(self, z):
         img = self.model(z)
@@ -82,40 +61,20 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    """
-    Discriminator network for GAN.
-    Architecture: 8 hidden layers with 1024 neurons each (matching NICE architecture).
-    """
+    """Discriminator network for GAN."""
     
     def __init__(self, img_shape: Tuple[int, int, int] = (1, 28, 28)):
         super(Discriminator, self).__init__()
         self.img_size = int(torch.prod(torch.tensor(img_shape)))
 
-        # Build 8 hidden layers with 1024 neurons each (matching NICE)
-        layers = []
-        
-        # First layer: img_size -> 1024
-        layers.extend([
-            nn.Linear(self.img_size, 1024),
+        self.model = nn.Sequential(
+            nn.Linear(self.img_size, 512),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Dropout(0.3)
-        ])
-        
-        # 7 more hidden layers: 1024 -> 1024
-        for _ in range(7):
-            layers.extend([
-                nn.Linear(1024, 1024),
-                nn.LeakyReLU(0.2, inplace=True),
-                nn.Dropout(0.3)
-            ])
-        
-        # Output layer: 1024 -> 1 (real/fake)
-        layers.extend([
-            nn.Linear(1024, 1),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(256, 1),
             nn.Sigmoid()
-        ])
-        
-        self.model = nn.Sequential(*layers)
+        )
 
     def forward(self, img):
         img_flat = img.view(img.size(0), -1)
@@ -213,6 +172,7 @@ def evaluate_nice(
         testloader: torch.utils.data.DataLoader,
         sample_shape: List[int],
         device: torch.device,
+        plots_dir: Path,
         filename_prefix: str,
         epoch: int,
         generate_samples: bool = False,
@@ -225,15 +185,14 @@ def evaluate_nice(
 
     with torch.no_grad():
         if generate_samples:
-            samples_dir = Path("plots")
-            samples_dir.mkdir(exist_ok=True, parents=True)
+            plots_dir.mkdir(exist_ok=True, parents=True)
 
             samples = flow.sample(sample_size).to(device)
             a, b = samples.min(), samples.max()
             samples = (samples - a) / (b - a + 1e-10)
             samples = samples.view(-1, *sample_shape)
 
-            sample_path = samples_dir / f"{filename_prefix}_epoch{epoch}.png"
+            sample_path = plots_dir / f"{filename_prefix}_epoch{epoch}.png"
             torchvision.utils.save_image(samples, sample_path, nrow=nrow, padding=2)
             logger.info(f"Generated {sample_size} NICE samples saved to {sample_path}")
 
@@ -254,6 +213,7 @@ def evaluate_gan(
         latent_dim: int,
         sample_shape: List[int],
         device: torch.device,
+        plots_dir: Path,
         filename_prefix: str,
         epoch: int,
         generate_samples: bool = False,
@@ -269,14 +229,13 @@ def evaluate_gan(
 
     with torch.no_grad():
         if generate_samples:
-            samples_dir = Path("plots")
-            samples_dir.mkdir(exist_ok=True, parents=True)
+            plots_dir.mkdir(exist_ok=True, parents=True)
 
             z = torch.randn(sample_size, latent_dim, device=device)
             samples = generator(z)
             samples = (samples + 1) / 2  # From [-1, 1] to [0, 1]
 
-            sample_path = samples_dir / f"{filename_prefix}_epoch{epoch}.png"
+            sample_path = plots_dir / f"{filename_prefix}_epoch{epoch}.png"
             torchvision.utils.save_image(samples, sample_path, nrow=nrow, padding=2)
             logger.info(f"Generated {sample_size} GAN samples saved to {sample_path}")
 
@@ -331,6 +290,7 @@ def get_data_loaders(
         ])
 
     data_path = Path(data_root)
+    data_path.mkdir(exist_ok=True, parents=True)
 
     if dataset_name.lower() == 'mnist':
         trainset = torchvision.datasets.MNIST(
@@ -382,14 +342,7 @@ def build_model_name(args: argparse.Namespace) -> str:
         )
 
 
-def save_metrics(metrics: List[float], filename: str, output_dir: Path) -> None:
-    """Save training/testing metrics to disk."""
-    metrics_dir = output_dir / "metrics"
-    metrics_dir.mkdir(exist_ok=True, parents=True)
-    
-    with open(metrics_dir / filename, 'wb') as f:
-        pickle.dump(metrics, f)
-    logger.info(f"Saved metrics to {metrics_dir / filename}")
+# Removed save_metrics function - metrics are no longer saved to disk
 
 
 # ==================== Main Training Function ====================
@@ -404,6 +357,10 @@ def train_and_evaluate(args: argparse.Namespace) -> None:
     else:
         device = torch.device("cpu")
         logger.info("Using CPU")
+
+    # Set up plots directory
+    plots_dir = Path("./plots")
+    plots_dir.mkdir(exist_ok=True, parents=True)
 
     # Get data loaders
     trainloader, testloader = get_data_loaders(
@@ -444,7 +401,7 @@ def train_and_evaluate(args: argparse.Namespace) -> None:
             train_losses.append(train_loss)
 
             test_loss = evaluate_nice(
-                flow, testloader, sample_shape, device, model_name, epoch,
+                flow, testloader, sample_shape, device, plots_dir, model_name, epoch,
                 generate_samples=(epoch % args.sample_interval == 0),
                 sample_size=args.sample_size, nrow=4
             )
@@ -456,8 +413,10 @@ def train_and_evaluate(args: argparse.Namespace) -> None:
             logger.info(f"Epoch {epoch + 1}/{args.epochs} - Train: {train_loss:.4f}, Test: {test_loss:.4f}")
 
         # Final evaluation
-        evaluate_nice(flow, testloader, sample_shape, device, model_name,
+        evaluate_nice(flow, testloader, sample_shape, device, plots_dir, model_name,
                      args.epochs, True, args.sample_size, 4)
+        
+        logger.info(f"Training complete. Train loss: {train_losses[-1]:.4f}, Test loss: {test_losses[-1]:.4f}")
 
     # ==================== GAN Training ====================
     else:  # method == "gan"
@@ -486,7 +445,7 @@ def train_and_evaluate(args: argparse.Namespace) -> None:
 
             g_test_loss, d_test_loss = evaluate_gan(
                 generator, discriminator, testloader, criterion, args.latent_dim,
-                sample_shape, device, model_name, epoch,
+                sample_shape, device, plots_dir, model_name, epoch,
                 generate_samples=(epoch % args.sample_interval == 0),
                 sample_size=args.sample_size, nrow=4
             )
@@ -500,8 +459,14 @@ def train_and_evaluate(args: argparse.Namespace) -> None:
 
         # Final evaluation
         evaluate_gan(generator, discriminator, testloader, criterion, args.latent_dim,
-                    sample_shape, device, model_name, args.epochs,
+                    sample_shape, device, plots_dir, model_name, args.epochs,
                     True, args.sample_size, 4)
+        
+        logger.info(
+            f"Training complete. "
+            f"G loss: {g_train_losses[-1]:.4f}/{g_test_losses[-1]:.4f}, "
+            f"D loss: {d_train_losses[-1]:.4f}/{d_test_losses[-1]:.4f}"
+        )
 
     logger.info("Training and evaluation complete!")
 

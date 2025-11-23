@@ -1,14 +1,13 @@
 ============================================================
 MÉTRICAS DE COMPARAÇÃO ENTRE KDE E NICE
-Dataset: Two Moons
+Dataset: Normal Bivariada
 ============================================================
 
-Distância de Hellinger: 0.250771
-Mean Squared Error (MSE): 0.001514
-Distância Euclidiana: 7.781846
-
+Métrica                   | KDE (Baseline)  | NICE (Flow)    
+Hellinger Dist.           | 0.046417          | 0.023911
+MSE                       | 0.000010          | 0.000002
+L2                        | 0.046417          | 0.023911
 ============================================================
-
 INTERPRETAÇÃO DAS MÉTRICAS:
 ------------------------------------------------------------
 • Distância de Hellinger: varia de 0 (idênticas) a 1 (totalmente diferentes)

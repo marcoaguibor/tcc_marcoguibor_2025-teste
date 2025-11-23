@@ -13,6 +13,13 @@ import torch.utils.data
 import torchvision
 from torchvision import transforms
 
+SEED = 2025
+torch.manual_seed(SEED)
+torch.cuda.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -27,8 +34,6 @@ except ImportError:
     logger.error("Failed to import 'nice' module. Make sure it's installed or in your PYTHONPATH.")
     raise
 
-
-# ==================== GAN Models ====================
 
 class Generator(nn.Module):
     """Generator network for GAN."""
@@ -45,12 +50,18 @@ class Generator(nn.Module):
             layers.append(nn.LeakyReLU(0.2, inplace=True))
             return layers
 
+        # Arquitetura profunda (8 camadas ocultas) para equiparar com NICE
+        # Largura: 256 neurônios (equivalente aos 128 do NICE mas com mais expressividade)
         self.model = nn.Sequential(
-            *block(latent_dim, 128, normalize=False),
-            *block(128, 256),
-            *block(256, 512),
-            *block(512, 1024),
-            nn.Linear(1024, self.img_size),
+            *block(latent_dim, 256, normalize=False),  
+            *block(256, 256),  
+            *block(256, 512),  
+            *block(512, 512),  
+            *block(512, 512),  
+            *block(512, 512),  
+            *block(512, 256),  
+            *block(256, 256),  
+            nn.Linear(256, self.img_size),  
             nn.Tanh()
         )
 
@@ -67,12 +78,40 @@ class Discriminator(nn.Module):
         super(Discriminator, self).__init__()
         self.img_size = int(torch.prod(torch.tensor(img_shape)))
 
+    
         self.model = nn.Sequential(
-            nn.Linear(self.img_size, 512),
+            nn.utils.spectral_norm(nn.Linear(self.img_size, 256)),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(512, 256),
+            nn.Dropout(0.3),
+            
+            nn.utils.spectral_norm(nn.Linear(256, 256)), 
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(256, 1),
+            nn.Dropout(0.3),
+            
+            nn.utils.spectral_norm(nn.Linear(256, 512)), 
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            
+            nn.utils.spectral_norm(nn.Linear(512, 512)), 
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            
+            nn.utils.spectral_norm(nn.Linear(512, 512)), 
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            
+            nn.utils.spectral_norm(nn.Linear(512, 256)),  
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            
+            nn.utils.spectral_norm(nn.Linear(256, 128)),  
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Dropout(0.3),
+            
+            nn.utils.spectral_norm(nn.Linear(128, 64)),   
+            nn.LeakyReLU(0.2, inplace=True),
+            
+            nn.Linear(64, 1),  
             nn.Sigmoid()
         )
 
@@ -82,14 +121,10 @@ class Discriminator(nn.Module):
         return validity
 
 
-# ==================== Utility Functions ====================
-
 def add_uniform_noise(x):
     """Add uniform noise for dequantization."""
     return x + torch.zeros_like(x).uniform_(0., 1. / 256.)
 
-
-# ==================== Training Functions ====================
 
 def train_epoch_nice(
         flow: nice.NICE,
@@ -165,8 +200,6 @@ def train_epoch_gan(
     return g_loss_epoch, d_loss_epoch
 
 
-# ==================== Evaluation Functions ====================
-
 def evaluate_nice(
         flow: nice.NICE,
         testloader: torch.utils.data.DataLoader,
@@ -177,7 +210,8 @@ def evaluate_nice(
         epoch: int,
         generate_samples: bool = False,
         sample_size: int = 64,
-        nrow: int = 4
+        nrow: int = 4,
+        sample_seed: int = 2025
 ) -> float:
     """Evaluate the NICE flow model and optionally generate samples."""
     loss_inference = 0.0
@@ -186,6 +220,11 @@ def evaluate_nice(
     with torch.no_grad():
         if generate_samples:
             plots_dir.mkdir(exist_ok=True, parents=True)
+
+            # Set seed for reproducible sampling
+            torch.manual_seed(sample_seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed(sample_seed)
 
             samples = flow.sample(sample_size).to(device)
             a, b = samples.min(), samples.max()
@@ -218,7 +257,8 @@ def evaluate_gan(
         epoch: int,
         generate_samples: bool = False,
         sample_size: int = 64,
-        nrow: int = 4
+        nrow: int = 4,
+        sample_seed: int = 2025
 ) -> Tuple[float, float]:
     """Evaluate the GAN and optionally generate samples."""
     g_loss_inference = 0.0
@@ -230,6 +270,11 @@ def evaluate_gan(
     with torch.no_grad():
         if generate_samples:
             plots_dir.mkdir(exist_ok=True, parents=True)
+
+            # Set seed for reproducible sampling
+            torch.manual_seed(sample_seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed(sample_seed)
 
             z = torch.randn(sample_size, latent_dim, device=device)
             samples = generator(z)
@@ -265,7 +310,6 @@ def evaluate_gan(
     return g_loss_inference, d_loss_inference
 
 
-# ==================== Data Loading ====================
 
 def get_data_loaders(
         dataset_name: str,
@@ -276,7 +320,7 @@ def get_data_loaders(
 ) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
     """Create data loaders for the specified dataset."""
     
-    # Different normalization for NICE and GAN
+
     if method == "nice":
         transform = transforms.Compose([
             transforms.ToTensor(),
@@ -321,8 +365,6 @@ def get_data_loaders(
     return trainloader, testloader
 
 
-# ==================== Utility Functions ====================
-
 def build_model_name(args: argparse.Namespace) -> str:
     """Construct a descriptive model name from arguments."""
     if args.method == "nice":
@@ -342,10 +384,6 @@ def build_model_name(args: argparse.Namespace) -> str:
         )
 
 
-# Removed save_metrics function - metrics are no longer saved to disk
-
-
-# ==================== Main Training Function ====================
 
 def train_and_evaluate(args: argparse.Namespace) -> None:
     """Train and evaluate the model with specified parameters."""
@@ -403,7 +441,7 @@ def train_and_evaluate(args: argparse.Namespace) -> None:
             test_loss = evaluate_nice(
                 flow, testloader, sample_shape, device, plots_dir, model_name, epoch,
                 generate_samples=(epoch % args.sample_interval == 0),
-                sample_size=args.sample_size, nrow=4
+                sample_size=args.sample_size, nrow=4, sample_seed=args.sample_seed
             )
             test_losses.append(test_loss)
 
@@ -414,11 +452,10 @@ def train_and_evaluate(args: argparse.Namespace) -> None:
 
         # Final evaluation
         evaluate_nice(flow, testloader, sample_shape, device, plots_dir, model_name,
-                     args.epochs, True, args.sample_size, 4)
+                     args.epochs, True, args.sample_size, 4, args.sample_seed)
         
         logger.info(f"Training complete. Train loss: {train_losses[-1]:.4f}, Test loss: {test_losses[-1]:.4f}")
 
-    # ==================== GAN Training ====================
     else:  # method == "gan"
         logger.info(f"Initializing GAN with latent dimension {args.latent_dim}")
 
@@ -447,7 +484,7 @@ def train_and_evaluate(args: argparse.Namespace) -> None:
                 generator, discriminator, testloader, criterion, args.latent_dim,
                 sample_shape, device, plots_dir, model_name, epoch,
                 generate_samples=(epoch % args.sample_interval == 0),
-                sample_size=args.sample_size, nrow=4
+                sample_size=args.sample_size, nrow=4, sample_seed=args.sample_seed
             )
             g_test_losses.append(g_test_loss)
             d_test_losses.append(d_test_loss)
@@ -460,7 +497,7 @@ def train_and_evaluate(args: argparse.Namespace) -> None:
         # Final evaluation
         evaluate_gan(generator, discriminator, testloader, criterion, args.latent_dim,
                     sample_shape, device, plots_dir, model_name, args.epochs,
-                    True, args.sample_size, 4)
+                    True, args.sample_size, 4, args.sample_seed)
         
         logger.info(
             f"Training complete. "
@@ -471,7 +508,6 @@ def train_and_evaluate(args: argparse.Namespace) -> None:
     logger.info("Training and evaluation complete!")
 
 
-# ==================== Argument Parsing ====================
 
 def parse_arguments():
     """Parse command line arguments."""
@@ -490,7 +526,7 @@ def parse_arguments():
     parser.add_argument('--data-root', type=str, default='./data',
                        help='Root directory for dataset storage')
 
-    # NICE-specific parameters
+
     parser.add_argument('--prior', type=str, default='logistic',
                        choices=['logistic', 'gaussian'], help='Latent distribution for NICE')
     parser.add_argument('--coupling', type=int, default=4,
@@ -502,11 +538,9 @@ def parse_arguments():
     parser.add_argument('--hidden', type=int, default=5,
                        help='Number of hidden layers for NICE')
 
-    # GAN-specific parameters
     parser.add_argument('--latent-dim', type=int, default=100,
                        help='Dimension of latent space for GAN')
 
-    # Training parameters
     parser.add_argument('--batch-size', type=int, default=128,
                        help='Batch size for training')
     parser.add_argument('--epochs', type=int, default=50,
@@ -516,7 +550,6 @@ def parse_arguments():
     parser.add_argument('--lr-schedule', action='store_true',
                        help='Use learning rate scheduler (NICE only)')
 
-    # Hardware parameters
     parser.add_argument('--no-cuda', action='store_true',
                        help='Disable CUDA')
     parser.add_argument('--gpu', type=int, default=0,
@@ -524,7 +557,6 @@ def parse_arguments():
     parser.add_argument('--num-workers', type=int, default=0,
                        help='Number of data loading workers')
 
-    # Output parameters
     parser.add_argument('--output-dir', type=str, default='./output',
                        help='Output directory')
     parser.add_argument('--sample-interval', type=int, default=10,
@@ -533,6 +565,8 @@ def parse_arguments():
                        help='Interval for saving checkpoints')
     parser.add_argument('--sample-size', type=int, default=64,
                        help='Number of samples to generate')
+    parser.add_argument('--sample-seed', type=int, default=42,
+                       help='Random seed for generating samples (ensures reproducibility across epochs)')
 
     return parser.parse_args()
 

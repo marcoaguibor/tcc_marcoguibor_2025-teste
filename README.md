@@ -37,7 +37,7 @@ Os códigos desenvolvidos estão nas pastas **[main/density_estimation](https://
 
 ## 1 - Estimação de densidades
 
-Para aplicar a estimação de densidades em two_moons, utilizando o NICE e KDE:
+Para aplicar a estimação de densidades em uma distribuição normal bivariada, utilizando o NICE e KDE:
 
 ```bash
 python main/density_estimation/density_estimation.py
@@ -101,3 +101,4 @@ Abaixo, segue tabela adaptada com parâmetros que podem ser aplicados:
 | `--hidden`           | Número de camadas ocultas em cada coupling layer                              | NICE           |
 | `--lr-schedule`      | Habilita scheduler de learning rate (ReduceLROnPlateau)                       | NICE           |
 | `--latent-dim`       | Dimensão do espaço latente (vetor z de entrada do generator)                  | GAN            | 
+
